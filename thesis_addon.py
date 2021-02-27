@@ -19,6 +19,15 @@ bl_info = {
 }
 
 
+class MESH_OT_Thesis_Props(bpy.types.PropertyGroup):
+
+    triangulate: bpy.props.BoolProperty(
+        name="Triangulate Cuts",
+        description="Triangulate Mesh Cuts",
+        default=False
+    )
+
+
 class MESH_OT_detect_non_manifold(bpy.types.Operator):
     """Detect non manifold vertices"""
     bl_idname = "mesh.detect_non_manifold"
@@ -108,12 +117,15 @@ class MESH_OT_cut_edge_star(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     # Allow program to select only when a vertex, edge ora face is selected in edit mode, otherwise deactivate panels buttons
+
     @classmethod
     def poll(cls, context):
         active_object = context.active_object
         return active_object is not None and active_object.type == 'MESH' and (context.mode == 'EDIT_MESH' or active_object.select_get()) and context.area.type == "VIEW_3D"
 
     def execute(self, context):
+        rgp = bpy.context.scene.thesis_props
+        ctoc = rgp.triangulate
 
         start_time = time.time()
 
@@ -144,7 +156,8 @@ class MESH_OT_cut_edge_star(bpy.types.Operator):
             use_grid_fill=True,
         )
 
-        #bmesh.ops.triangulate(bm, faces=bm.faces[:])
+        if ctoc:
+            bmesh.ops.triangulate(bm, faces=bm.faces[:])
 
         #selected_vertices = [v for v in bm.verts if v.select == True]
 
@@ -410,31 +423,42 @@ class VIEW3D_PT_thesis(bpy.types.Panel):
     bl_category = "Thesis Addon"
 
     def draw(self, context):
-        self.layout.operator(
+        layout = self.layout
+        scene = context.scene
+        col = layout.column(align=True)
+        row = layout.row(align=False)
+
+        layout.operator(
             'mesh.detect_non_manifold',
             text="Detect non manifold vertices",
             icon="PROP_OFF",
         )
-        self.layout.operator(
+
+        layout.operator(
             'mesh.cut_edge_star',
             text="Cut Edge-Star",
             icon="SCULPTMODE_HLT",
         )
-        self.layout.operator(
+        layout.prop(scene.thesis_props, "triangulate")
+
+        layout.operator(
             'mesh.fix_non_manifold',
             text="Fix non manifold vertices",
             icon="PROP_OFF",
         )
-        self.layout.operator(
+
+        layout.operator(
             'mesh.set_random_labels',
             text="Set Random Poly Labels",
             icon="PROP_OFF",
         )
-        self.layout.operator(
+
+        layout.operator(
             'mesh.set_labels',
             text="Set Labels (Origin Center)",
             icon="PROP_OFF",
         )
+
         """ self.layout.operator(
             'mesh.select_star_fan',
             text="Select Polygon Fan",
@@ -448,6 +472,7 @@ class VIEW3D_PT_thesis(bpy.types.Panel):
 
 
 bl_classes = (
+    MESH_OT_Thesis_Props,
     MESH_OT_detect_non_manifold,
     MESH_OT_cut_edge_star,
     MESH_OT_fix_non_manifold,
@@ -460,8 +485,11 @@ bl_classes = (
 def register():
     for bl_class in bl_classes:
         bpy.utils.register_class(bl_class)
+    bpy.types.Scene.thesis_props = bpy.props.PointerProperty(
+        type=MESH_OT_Thesis_Props)
 
 
 def unregister():
     for bl_class in bl_classes:
         bpy.utils.unregister_class(bl_class)
+    del bpy.props.thesis_props
