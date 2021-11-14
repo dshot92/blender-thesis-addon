@@ -28,6 +28,49 @@ class MESH_OT_Thesis_Props(bpy.types.PropertyGroup):
     )
 
 
+class MESH_OT_add_test_materials(bpy.types.Operator):
+    """Add  Test Material to Mesh"""
+    bl_idname = "mesh.add_test_materials"
+    bl_label = "Add  Test Material to Mesh"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    # Allow program to select only when a vertex, edge ora face is selected in edit mode, otherwise deactivate panels buttons
+    @classmethod
+    def poll(cls, context):
+        active_object = context.active_object
+        return active_object is not None and active_object.type == 'MESH' and context.area.type == "VIEW_3D" and active_object.select_get()
+
+    def execute(self, context):
+        bpy.context.space_data.shading.type = 'MATERIAL'
+
+        activeObject = bpy.context.active_object
+
+        colors = {
+            "Red": (1.000000, 0.000000, 0.000000, 1.000000),
+            "Blue": (0.000000, 0.001617, 1.000000, 1.000000),
+            "Green": (0.004734, 1.000000, 0.000000, 1.000000),
+            "Yellow": (0.800000, 0.716535, 0.000000, 1.000000),
+            "Cyan": (0.000000, 0.748324, 0.800000, 1.000000),
+            "Lime": (0.467342, 0.800000, 0.256636, 1.000000),
+            "Pink": (0.642501, 0.000000, 0.800000, 1.000000),
+            "Orange": (0.800000, 0.330545, 0.000000, 1.000000)
+        }
+
+        for col in colors.keys():
+
+            obj_name_list = [slot.name for slot in activeObject.material_slots]
+
+            if col not in obj_name_list:
+                mat = bpy.data.materials.new(name=col)
+                print(mat.name)
+                mat.diffuse_color = colors[col]
+                activeObject.data.materials.append(mat)
+
+        self.report({'INFO'}, "Materials Added")
+
+        return {'FINISHED'}
+
+
 class MESH_OT_detect_non_manifold(bpy.types.Operator):
     """Detect non manifold vertices"""
     bl_idname = "mesh.detect_non_manifold"
@@ -58,6 +101,7 @@ class MESH_OT_detect_non_manifold(bpy.types.Operator):
         # Modify the BMesh, can do anything here...
         bm.verts.ensure_lookup_table()
 
+        # Do breadth first search around each vertex
         for v in bm.verts:
             comps = []
 
@@ -97,6 +141,7 @@ class MESH_OT_detect_non_manifold(bpy.types.Operator):
                 if len(labels) < len(comps):
                     bm.verts[v.index].select = True
 
+        # Update mesh
         me.update()
         bm.to_mesh(me)
         bm.free()
@@ -124,8 +169,8 @@ class MESH_OT_cut_edge_star(bpy.types.Operator):
         return active_object is not None and active_object.type == 'MESH' and (context.mode == 'EDIT_MESH' or active_object.select_get()) and context.area.type == "VIEW_3D"
 
     def execute(self, context):
-        rgp = bpy.context.scene.thesis_props
-        ctoc = rgp.triangulate
+        # Get bool from panel
+        cut_and_triangulate = bpy.context.scene.thesis_props.triangulate
 
         start_time = time.time()
 
@@ -144,11 +189,14 @@ class MESH_OT_cut_edge_star(bpy.types.Operator):
         bm.edges.ensure_lookup_table()
         bm.faces.ensure_lookup_table()
 
+        # Get Selected Vertices
         selected_vertices = [v for v in bm.verts if v.select == True]
 
+        # Retrieve the edges index from the selected vertices
         edge_indices = {
             e for v in selected_vertices for e in bm.verts[v.index].link_edges}
 
+        # Cut each edge aound the selected vertices
         bmesh.ops.subdivide_edges(
             bm,
             edges=list(edge_indices),
@@ -156,7 +204,8 @@ class MESH_OT_cut_edge_star(bpy.types.Operator):
             use_grid_fill=True,
         )
 
-        if ctoc:
+        # Tirangulate the mesh
+        if cut_and_triangulate:
             bmesh.ops.triangulate(bm, faces=bm.faces[:])
 
         #selected_vertices = [v for v in bm.verts if v.select == True]
@@ -428,34 +477,45 @@ class VIEW3D_PT_thesis(bpy.types.Panel):
         col = layout.column(align=True)
         row = layout.row(align=False)
 
-        layout.operator(
-            'mesh.detect_non_manifold',
-            text="Detect non manifold vertices",
+        box = layout.box()
+        box.label(text="Test Materials")
+        box.operator(
+            'mesh.add_test_materials',
+            text="Add  Test Material",
             icon="PROP_OFF",
         )
 
-        layout.operator(
-            'mesh.cut_edge_star',
-            text="Cut Edge-Star",
-            icon="SCULPTMODE_HLT",
-        )
-        layout.prop(scene.thesis_props, "triangulate")
-
-        layout.operator(
-            'mesh.fix_non_manifold',
-            text="Fix non manifold vertices",
-            icon="PROP_OFF",
-        )
-
-        layout.operator(
+        box.operator(
             'mesh.set_random_labels',
             text="Set Random Poly Labels",
             icon="PROP_OFF",
         )
 
-        layout.operator(
+        box.operator(
             'mesh.set_labels',
             text="Set Labels (Origin Center)",
+            icon="PROP_OFF",
+        )
+
+        box = layout.box()
+        # box.row(align=True)
+        box.label(text="Fix")
+        box.operator(
+            'mesh.detect_non_manifold',
+            text="Detect non manifold vertices",
+            icon="PROP_OFF",
+        )
+
+        box.operator(
+            'mesh.cut_edge_star',
+            text="Cut Edge-Star",
+            icon="SCULPTMODE_HLT",
+        )
+        box.prop(scene.thesis_props, "triangulate")
+
+        box.operator(
+            'mesh.fix_non_manifold',
+            text="Fix non manifold vertices",
             icon="PROP_OFF",
         )
 
@@ -473,6 +533,7 @@ class VIEW3D_PT_thesis(bpy.types.Panel):
 
 bl_classes = (
     MESH_OT_Thesis_Props,
+    MESH_OT_add_test_materials,
     MESH_OT_detect_non_manifold,
     MESH_OT_cut_edge_star,
     MESH_OT_fix_non_manifold,
@@ -492,4 +553,4 @@ def register():
 def unregister():
     for bl_class in bl_classes:
         bpy.utils.unregister_class(bl_class)
-    del bpy.props.thesis_props
+    del bpy.types.Scene.thesis_props
