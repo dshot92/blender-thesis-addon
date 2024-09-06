@@ -44,7 +44,34 @@ class MESH_OT_add_test_mesh(Operator):
 
         mesh.update()
 
-        self.report({'INFO'}, "Mesh Imported")
+        # Create new material
+        material = bpy.data.materials.new(name="Color_Material")
+        material.use_nodes = True
+        nodes = material.node_tree.nodes
+
+        # Clear all nodes
+        nodes.clear()
+
+        # Create nodes
+        node_output = nodes.new(type='ShaderNodeOutputMaterial')
+        node_bsdf = nodes.new(type='ShaderNodeBsdfPrincipled')
+        node_attribute = nodes.new(type='ShaderNodeAttribute')
+
+        # Set up attribute node
+        node_attribute.attribute_name = "Color"
+
+        # Link nodes
+        links = material.node_tree.links
+        links.new(node_attribute.outputs["Color"], node_bsdf.inputs["Base Color"])
+        links.new(node_bsdf.outputs["BSDF"], node_output.inputs["Surface"])
+
+        # Assign material to object
+        if obj.data.materials:
+            obj.data.materials[0] = material
+        else:
+            obj.data.materials.append(material)
+
+        self.report({'INFO'}, "Mesh Imported and Material Added")
         return {'FINISHED'}
 
 
@@ -74,9 +101,13 @@ class MESH_OT_set_noise_colors(Operator):
         if color_layer is None:
             color_layer = bm.faces.layers.float_color.new("Color")
 
-        random.seed(context.scene.thesis_props.random_seed)
+        seed = context.scene.thesis_props.random_seed
         cluster_scale = context.scene.thesis_props.noise_scale
         use_voronoi = context.scene.thesis_props.use_voronoi
+
+        # Set seed for both noise and random
+        noise.seed_set(seed)
+        random.seed(seed)
 
         # Define distinct colors
         distinct_colors = [
