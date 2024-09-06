@@ -26,8 +26,8 @@ class MESH_OT_Thesis_Props(PropertyGroup):
         min=0.01,
         soft_max=1.0
     )
-    num_clusters: IntProperty(
-        name="Num Clusters",
+    cluster_num: IntProperty(
+        name="Cluster Num",
         description="Number of clusters for color assignment",
         default=8,
         min=2,

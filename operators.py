@@ -60,25 +60,28 @@ class MESH_OT_set_noise_colors(Operator):
         bm.from_mesh(mesh)
 
         # Get or create integer attribute for color indices
-        color_index_layer = bm.faces.layers.int.get("ColorIndex")
+        color_index_layer = bm.faces.layers.int.get("Color")
         if color_index_layer is None:
-            color_index_layer = bm.faces.layers.int.new("ColorIndex")
+            color_index_layer = bm.faces.layers.int.new("Color")
 
         seed = context.scene.thesis_props.random_seed
         cluster_scale = context.scene.thesis_props.noise_scale
         use_voronoi = context.scene.thesis_props.use_voronoi
 
         # Set seed for both noise and random
-        noise.seed_set(seed)
-        random.seed(seed)
+        if seed == 0:
+            seed = int(time.time())
+        else:
+            noise.seed_set(seed)
+            random.seed(seed)
 
-        # Number of distinct colors (now using num_clusters)
-        num_clusters = context.scene.thesis_props.num_clusters
+        # Number of distinct colors (now using cluster_num)
+        cluster_num = context.scene.thesis_props.cluster_num
 
         if use_voronoi:
             # Generate Voronoi points
             voronoi_points = [Vector((random.uniform(-1, 1), random.uniform(-1, 1),
-                                     random.uniform(-1, 1))) * cluster_scale for _ in range(num_clusters)]
+                                     random.uniform(-1, 1))) * cluster_scale for _ in range(cluster_num)]
 
             for face in bm.faces:
                 center = obj.matrix_world @ face.calc_center_median()
@@ -92,7 +95,7 @@ class MESH_OT_set_noise_colors(Operator):
                 center = obj.matrix_world @ face.calc_center_median()
                 noise_value = noise.noise(center * cluster_scale)
                 color_index = int((noise_value + 1) * 0.5 *
-                                  num_clusters) % num_clusters
+                                  cluster_num) % cluster_num
                 face[color_index_layer] = color_index
 
         # Update mesh
@@ -233,10 +236,10 @@ class MESH_OT_fix_non_manifold(Operator):
 
         bm = create_bmesh(context)
 
-        int_layer = bm.faces.layers.int.get("ColorIndex")
+        int_layer = bm.faces.layers.int.get("Color")
         if int_layer is None:
             self.report({'ERROR'},
-                        "No 'ColorIndex' face attribute found."
+                        "No 'Color' face attribute found."
                         + " Please set colors first.")
             return {'CANCELLED'}
 

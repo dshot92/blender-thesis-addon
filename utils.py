@@ -12,9 +12,9 @@ def dummy_view_layer_update(context):
 
 def create_color_material():
     """
-    Creates and returns a new material with nodes set up for color visualization based on the 'ColorIndex' attribute.
+    Creates and returns a new material with nodes set up for color visualization based on the 'Color' attribute.
 
-    This function sets up a node-based material that uses the 'ColorIndex' attribute to generate a color
+    This function sets up a node-based material that uses the 'Color' attribute to generate a color
     visualization. It uses a Voronoi texture node to create a varied color pattern based on the attribute value.
 
     Returns:
@@ -33,7 +33,7 @@ def create_color_material():
     node_attribute = nodes.new(type='ShaderNodeAttribute')
 
     # Set up nodes
-    node_attribute.attribute_name = "ColorIndex"
+    node_attribute.attribute_name = "Color"
     node_voronoi.voronoi_dimensions = '3D'
 
     # Position nodes
@@ -104,7 +104,7 @@ def analyze_vertex_manifold(bm: bmesh.types.BMesh) -> List[bmesh.types.BMVert]:
     Returns:
         List[bmesh.types.BMVert]: A list of detected non-manifold vertices.
     """
-    int_layer = bm.faces.layers.int.get("ColorIndex")
+    int_layer = bm.faces.layers.int.get("Color")
     if int_layer is None:
         return []
 
@@ -154,7 +154,7 @@ def detect_non_manifold_vertices(bm: bmesh.types.BMesh) -> List[bmesh.types.BMVe
 
 
 def fix_non_manifold_vertices(bm: bmesh.types.BMesh, selected_vertices: List[bmesh.types.BMVert]) -> List[bmesh.types.BMVert]:
-    int_layer = bm.faces.layers.int.get("ColorIndex")
+    int_layer = bm.faces.layers.int.get("Color")
     if int_layer is None:
         return []
 
