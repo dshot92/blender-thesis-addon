@@ -163,48 +163,35 @@ def fix_non_manifold_vertices(bm: bmesh.types.BMesh, selected_vertices: List[bme
 
     try:
         for v in selected_vertices:
-            immediate_fan = list(v.link_faces)
+            immediate_fan = set(v.link_faces)
+            extended_fan = set(f for face in immediate_fan for e in face.edges for f in e.link_faces)
             
-            # Count occurrences of each color in the immediate fan
-            color_counts = defaultdict(int)
-            for face in immediate_fan:
-                color_counts[face[int_layer]] += 1
-
-            if len(color_counts) <= 1:
+            # Analyze clusters in the extended fan
+            clusters = analyze_clusters(extended_fan, int_layer)
+            
+            if len(clusters) <= 1:
                 continue  # Vertex is already manifold
 
-            # Identify disconnected clusters
-            clusters = []
-            for face in immediate_fan:
-                if not any(face in cluster for cluster in clusters):
-                    cluster = []
-                    color = face[int_layer]
-                    stack = [face]
-                    while stack:
-                        current_face = stack.pop()
-                        if current_face not in cluster and current_face in immediate_fan and current_face[int_layer] == color:
-                            cluster.append(current_face)
-                            stack.extend(adj for edge in current_face.edges for adj in edge.link_faces if adj in immediate_fan)
-                    clusters.append(cluster)
+            # Determine the target color based on the specified criteria
+            target_color = determine_target_color(clusters, immediate_fan, extended_fan, int_layer)
 
-            # If there are disconnected clusters of the same color, connect them
-            most_common_color = max(color_counts, key=color_counts.get)
-            target_clusters = [c for c in clusters if c[0][int_layer] == most_common_color]
-
-            if len(target_clusters) > 1:
-                changes_made = False
-                for i in range(1, len(target_clusters)):
-                    # Find the shortest path between clusters
-                    bridge = find_shortest_bridge(target_clusters[0], target_clusters[i], immediate_fan)
-                    
-                    # Change the color of bridge faces
-                    for face in bridge:
-                        if face[int_layer] != most_common_color:
-                            face[int_layer] = most_common_color
+            if target_color is not None:
+                # Find clusters to connect
+                clusters_to_connect = [c for c in clusters if c['color'] == target_color and c['faces'] & immediate_fan]
+                
+                if len(clusters_to_connect) > 1:
+                    changes_made = connect_clusters(clusters_to_connect, immediate_fan, int_layer, target_color)
+                    if changes_made:
+                        fixed_vertices.append(v)
+                else:
+                    # If there's only one cluster with the target color, color all immediate faces
+                    changes_made = False
+                    for face in immediate_fan:
+                        if face[int_layer] != target_color:
+                            face[int_layer] = target_color
                             changes_made = True
-
-                if changes_made:
-                    fixed_vertices.append(v)
+                    if changes_made:
+                        fixed_vertices.append(v)
 
     finally:
         # Restore the original selection state
@@ -212,6 +199,24 @@ def fix_non_manifold_vertices(bm: bmesh.types.BMesh, selected_vertices: List[bme
             v.select = was_selected
 
     return fixed_vertices
+
+def connect_clusters(clusters_to_connect, immediate_fan, int_layer, target_color):
+    changes_made = False
+    for i in range(1, len(clusters_to_connect)):
+        bridge = find_shortest_bridge(clusters_to_connect[0]['faces'], clusters_to_connect[i]['faces'], immediate_fan)
+        for face in bridge:
+            if face[int_layer] != target_color:
+                face[int_layer] = target_color
+                changes_made = True
+    
+    # If no changes were made by bridging, color all immediate faces
+    if not changes_made:
+        for face in immediate_fan:
+            if face[int_layer] != target_color:
+                face[int_layer] = target_color
+                changes_made = True
+    
+    return changes_made
 
 def find_shortest_bridge(cluster1, cluster2, all_faces):
     # Find the shortest path of faces connecting two clusters
@@ -238,3 +243,49 @@ def force_reanalyze_manifold(bm: bmesh.types.BMesh):
     if "manifold" in bm.verts.layers.int:
         bm.verts.layers.int.remove(bm.verts.layers.int["manifold"])
     analyze_vertex_manifold(bm)
+
+def analyze_clusters(faces, int_layer):
+    clusters = []
+    visited = set()
+
+    for face in faces:
+        if face not in visited:
+            color = face[int_layer]
+            cluster = {'color': color, 'faces': set()}
+            stack = [face]
+            while stack:
+                current_face = stack.pop()
+                if current_face not in visited and current_face in faces and current_face[int_layer] == color:
+                    visited.add(current_face)
+                    cluster['faces'].add(current_face)
+                    stack.extend(adj for e in current_face.edges for adj in e.link_faces if adj in faces)
+            clusters.append(cluster)
+
+    return clusters
+
+def determine_target_color(clusters, immediate_fan, extended_fan, int_layer):
+    # Count clusters in the immediate fan
+    immediate_cluster_counts = defaultdict(int)
+    immediate_clusters = [c for c in clusters if c['faces'] & immediate_fan]
+    for cluster in immediate_clusters:
+        immediate_cluster_counts[cluster['color']] += 1
+    
+    most_frequent_color = max(immediate_cluster_counts, key=immediate_cluster_counts.get)
+    if list(immediate_cluster_counts.values()).count(immediate_cluster_counts[most_frequent_color]) == 1:
+        return most_frequent_color
+
+    # Check face count of clusters in the immediate fan
+    immediate_face_counts = defaultdict(int)
+    for cluster in immediate_clusters:
+        immediate_face_counts[cluster['color']] += len(cluster['faces'] & immediate_fan)
+    
+    max_face_count = max(immediate_face_counts.values())
+    if list(immediate_face_counts.values()).count(max_face_count) == 1:
+        return max(immediate_face_counts, key=immediate_face_counts.get)
+
+    # Check extended fan
+    extended_cluster_counts = defaultdict(int)
+    for cluster in clusters:
+        extended_cluster_counts[cluster['color']] += 1
+    
+    return max(extended_cluster_counts, key=extended_cluster_counts.get)
