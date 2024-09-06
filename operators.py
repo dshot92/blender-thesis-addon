@@ -2,10 +2,9 @@ import bpy
 import bmesh
 import time
 import random
-import operator
 from bpy.types import Operator, Context
 from mathutils import noise, Vector
-from .utils import create_bmesh, update_mesh, is_non_manifold, dummy_view_layer_update, detect_non_manifold_vertices, fix_non_manifold_vertices
+from .utils import create_bmesh, update_mesh, dummy_view_layer_update, detect_non_manifold_vertices, fix_non_manifold_vertices, create_color_material
 from bpy.ops import _BPyOpsSubModOp
 from pathlib import Path
 
@@ -22,39 +21,11 @@ class MESH_OT_add_test_mesh(Operator):
                               import_vertex_groups=True)
 
         obj = context.active_object
-        mesh = obj.data
+        # mesh = obj.data
 
-        # Create new material
-        material = bpy.data.materials.new(name="Color_Material")
-        material.use_nodes = True
-        nodes = material.node_tree.nodes
-        nodes.clear()
+        # Create and assign material
+        material = create_color_material()
 
-        # Create nodes
-        node_output = nodes.new(type='ShaderNodeOutputMaterial')
-        node_bsdf = nodes.new(type='ShaderNodeBsdfPrincipled')
-        node_voronoi = nodes.new(type='ShaderNodeTexVoronoi')
-        node_attribute = nodes.new(type='ShaderNodeAttribute')
-
-        # Set up nodes
-        node_attribute.attribute_name = "ColorIndex"
-        node_voronoi.voronoi_dimensions = '3D'
-
-        # Position nodes
-        node_output.location = (600, 0)
-        node_bsdf.location = (400, 0)
-        node_voronoi.location = (200, 0)
-        node_attribute.location = (0, 0)
-
-        # Link nodes
-        links = material.node_tree.links
-        links.new(node_attribute.outputs["Vector"],
-                  node_voronoi.inputs["Vector"])
-        links.new(node_voronoi.outputs["Color"],
-                  node_bsdf.inputs["Base Color"])
-        links.new(node_bsdf.outputs["BSDF"], node_output.inputs["Surface"])
-
-        # Assign material to object
         if obj.data.materials:
             obj.data.materials[0] = material
         else:
@@ -128,7 +99,9 @@ class MESH_OT_set_noise_colors(Operator):
         mesh.update()
 
         noise_type = "Voronoi" if use_voronoi else "Simple"
-        self.report({'INFO'}, f"Set {noise_type} clustered colors: {time.time() - start_time:.2f} seconds")
+        self.report({'INFO'},
+                    f"Set {noise_type} clustered colors:"
+                    + f" {time.time() - start_time:.2f} seconds")
         return {'FINISHED'}
 
 
@@ -175,63 +148,9 @@ class MESH_OT_detect_non_manifold(Operator):
         finally:
             _BPyOpsSubModOp._view_layer_update = view_layer_update
 
-        self.report({'INFO'}, f"Detect: {time.time() - start_time:.2f} seconds. Found {len(non_manifold_verts)} non-manifold vertices.")
-        return {'FINISHED'}
-
-
-class MESH_OT_fix_non_manifold(Operator):
-    """Fix non manifold vertices"""
-    bl_idname = "mesh.fix_non_manifold"
-    bl_label = "Fix non manifold vertices"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    @classmethod
-    def poll(cls, context):
-        active_object = context.active_object
-        return active_object is not None and active_object.type == 'MESH' and (context.mode == 'EDIT_MESH' or active_object.select_get()) and context.area.type == "VIEW_3D"
-
-    def execute(self, context: Context):
-        start_time = time.time()
-        view_layer_update = _BPyOpsSubModOp._view_layer_update
-
-        try:
-            _BPyOpsSubModOp._view_layer_update = dummy_view_layer_update
-
-            bpy.ops.object.mode_set(mode="EDIT")
-            bpy.ops.mesh.select_mode(type="VERT")
-
-            bm = create_bmesh(context)
-
-            int_layer = bm.faces.layers.int.get("ColorIndex")
-            if int_layer is None:
-                self.report(
-                    {'ERROR'}, "No 'ColorIndex' face attribute found. Please set colors first.")
-                return {'CANCELLED'}
-
-            selected_vertices = [v for v in bm.verts if v.select]
-
-            fixed_vertices = fix_non_manifold_vertices(bm, selected_vertices)
-
-            # Clear selection
-            for v in bm.verts:
-                v.select = False
-
-            # Select fixed vertices
-            for v in fixed_vertices:
-                v.select = True
-
-            update_mesh(context, bm)
-            bpy.ops.object.mode_set(mode="EDIT")
-            bpy.ops.mesh.select_mode(type="VERT")
-
-        finally:
-            _BPyOpsSubModOp._view_layer_update = view_layer_update
-
-        if fixed_vertices:
-            self.report({'INFO'}, f"Fix: {time.time() - start_time:.2f} seconds. Fixed {len(fixed_vertices)} vertices.")
-        else:
-            self.report({'INFO'}, f"Fix: {time.time() - start_time:.2f} seconds. No vertices needed fixing.")
-
+        self.report({'INFO'},
+                    f"Detect: {time.time() - start_time:.2f} seconds."
+                    + f" Found {len(non_manifold_verts)} non-manifold verts.")
         return {'FINISHED'}
 
 
@@ -294,7 +213,70 @@ class MESH_OT_cut_edge_star(Operator):
         finally:
             _BPyOpsSubModOp._view_layer_update = view_layer_update
 
-        self.report({'INFO'}, f"Cut: {time.time() - start_time:.2f} seconds. Found {len(non_manifold_verts)} non-manifold vertices.")
+        self.report({'INFO'},
+                    f"Cut: {time.time() - start_time:.2f} seconds."
+                    + f" Found {len(non_manifold_verts)} non-manifold verts.")
+        return {'FINISHED'}
+
+
+class MESH_OT_fix_non_manifold(Operator):
+    """Fix non manifold vertices"""
+    bl_idname = "mesh.fix_non_manifold"
+    bl_label = "Fix non manifold vertices"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        active_object = context.active_object
+        return active_object is not None and active_object.type == 'MESH' and (context.mode == 'EDIT_MESH' or active_object.select_get()) and context.area.type == "VIEW_3D"
+
+    def execute(self, context: Context):
+        start_time = time.time()
+        view_layer_update = _BPyOpsSubModOp._view_layer_update
+
+        try:
+            _BPyOpsSubModOp._view_layer_update = dummy_view_layer_update
+
+            bpy.ops.object.mode_set(mode="EDIT")
+            bpy.ops.mesh.select_mode(type="VERT")
+
+            bm = create_bmesh(context)
+
+            int_layer = bm.faces.layers.int.get("ColorIndex")
+            if int_layer is None:
+                self.report({'ERROR'},
+                            "No 'ColorIndex' face attribute found."
+                            + " Please set colors first.")
+                return {'CANCELLED'}
+
+            selected_vertices = [v for v in bm.verts if v.select]
+
+            fixed_vertices = fix_non_manifold_vertices(bm, selected_vertices)
+
+            # Clear selection
+            for v in bm.verts:
+                v.select = False
+
+            # Select fixed vertices
+            for v in fixed_vertices:
+                v.select = True
+
+            update_mesh(context, bm)
+            bpy.ops.object.mode_set(mode="EDIT")
+            bpy.ops.mesh.select_mode(type="VERT")
+
+        finally:
+            _BPyOpsSubModOp._view_layer_update = view_layer_update
+
+        if fixed_vertices:
+            self.report({'INFO'},
+                        f"Fix: {time.time() - start_time:.2f} seconds."
+                        + f" Fixed {len(fixed_vertices)} vertices.")
+        else:
+            self.report({'INFO'},
+                        f"Fix: {time.time() - start_time:.2f} seconds."
+                        + " No vertices needed fixing.")
+
         return {'FINISHED'}
 
 

@@ -9,6 +9,38 @@ def dummy_view_layer_update(context):
     pass
 
 
+def create_color_material():
+    # Create new material
+    material = bpy.data.materials.new(name="Color_Material")
+    material.use_nodes = True
+    nodes = material.node_tree.nodes
+    nodes.clear()
+
+    # Create nodes
+    node_output = nodes.new(type='ShaderNodeOutputMaterial')
+    node_bsdf = nodes.new(type='ShaderNodeBsdfPrincipled')
+    node_voronoi = nodes.new(type='ShaderNodeTexVoronoi')
+    node_attribute = nodes.new(type='ShaderNodeAttribute')
+
+    # Set up nodes
+    node_attribute.attribute_name = "ColorIndex"
+    node_voronoi.voronoi_dimensions = '3D'
+
+    # Position nodes
+    node_output.location = (700, 0)
+    node_bsdf.location = (400, 0)
+    node_voronoi.location = (200, 0)
+    node_attribute.location = (0, 0)
+
+    # Link nodes
+    links = material.node_tree.links
+    links.new(node_attribute.outputs["Vector"], node_voronoi.inputs["Vector"])
+    links.new(node_voronoi.outputs["Color"], node_bsdf.inputs["Base Color"])
+    links.new(node_bsdf.outputs["BSDF"], node_output.inputs["Surface"])
+
+    return material
+
+
 def create_bmesh(context: Context) -> bmesh.types.BMesh:
     if context.edit_object:
         me = context.edit_object.data
