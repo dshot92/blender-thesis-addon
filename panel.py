@@ -20,8 +20,7 @@ class VIEW3D_PT_thesis(Panel):
         box.prop(scene.thesis_props, "random_seed")
         box.prop(scene.thesis_props, "noise_scale")
         box.prop(scene.thesis_props, "use_voronoi")
-        if scene.thesis_props.use_voronoi:
-            box.prop(scene.thesis_props, "voronoi_points")
+        box.prop(scene.thesis_props, "num_clusters")
         box.operator('mesh.set_noise_colors', text="Set Noise-based Colors", icon="PROP_OFF")
 
         box = layout.box()

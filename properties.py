@@ -21,11 +21,11 @@ class MESH_OT_Thesis_Props(PropertyGroup):
         min=0.01,
         soft_max=1.0
     )
-    voronoi_points: IntProperty(
-        name="Voronoi Points",
-        description="Number of Voronoi points to generate",
-        default=10,
-        min=1,
+    num_clusters: IntProperty(
+        name="Num Clusters",
+        description="Number of clusters for color assignment",
+        default=8,
+        min=2,
         max=100
     )
     use_voronoi: BoolProperty(
