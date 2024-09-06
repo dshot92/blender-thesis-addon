@@ -4,8 +4,7 @@ import time
 import random
 from bpy.types import Operator, Context
 from mathutils import noise, Vector
-from .utils import create_bmesh, update_mesh, dummy_view_layer_update, detect_non_manifold_vertices, fix_non_manifold_vertices, create_color_material
-from bpy.ops import _BPyOpsSubModOp
+from .utils import create_bmesh, update_mesh, detect_non_manifold_vertices, fix_non_manifold_vertices, create_color_material
 from pathlib import Path
 
 
@@ -118,35 +117,28 @@ class MESH_OT_detect_non_manifold(Operator):
 
     def execute(self, context: Context):
         start_time = time.time()
-        view_layer_update = _BPyOpsSubModOp._view_layer_update
 
-        try:
-            _BPyOpsSubModOp._view_layer_update = dummy_view_layer_update
+        me = context.object.data
 
-            me = context.object.data
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_all(action='DESELECT')
+        bpy.ops.object.mode_set(mode="OBJECT")
 
-            bpy.ops.object.mode_set(mode="EDIT")
-            bpy.ops.mesh.select_all(action='DESELECT')
-            bpy.ops.object.mode_set(mode="OBJECT")
+        bm = bmesh.new()
+        bm.from_mesh(me)
+        bm.verts.ensure_lookup_table()
 
-            bm = bmesh.new()
-            bm.from_mesh(me)
-            bm.verts.ensure_lookup_table()
+        non_manifold_verts = detect_non_manifold_vertices(bm)
 
-            non_manifold_verts = detect_non_manifold_vertices(bm)
+        for v in non_manifold_verts:
+            v.select = True
 
-            for v in non_manifold_verts:
-                v.select = True
+        bm.to_mesh(me)
+        bm.free()
+        me.update()
 
-            bm.to_mesh(me)
-            bm.free()
-            me.update()
-
-            bpy.ops.object.mode_set(mode="EDIT")
-            bpy.ops.mesh.select_mode(type="VERT")
-
-        finally:
-            _BPyOpsSubModOp._view_layer_update = view_layer_update
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_mode(type="VERT")
 
         self.report({'INFO'},
                     f"Detect: {time.time() - start_time:.2f} seconds."
@@ -166,52 +158,45 @@ class MESH_OT_cut_edge_star(Operator):
         return active_object is not None and active_object.type == 'MESH' and (context.mode == 'EDIT_MESH' or active_object.select_get()) and context.area.type == "VIEW_3D"
 
     def execute(self, context: Context):
-        view_layer_update = _BPyOpsSubModOp._view_layer_update
+        cut_and_triangulate = bpy.context.scene.thesis_props.triangulate
 
-        try:
-            _BPyOpsSubModOp._view_layer_update = dummy_view_layer_update
-            cut_and_triangulate = bpy.context.scene.thesis_props.triangulate
+        start_time = time.time()
 
-            start_time = time.time()
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.object.mode_set(mode="OBJECT")
 
-            bpy.ops.object.mode_set(mode="EDIT")
-            bpy.ops.object.mode_set(mode="OBJECT")
+        bm = create_bmesh(context)
 
-            bm = create_bmesh(context)
+        selected_vertices = [v for v in bm.verts if v.select]
+        edge_indices = {
+            e for v in selected_vertices for e in bm.verts[v.index].link_edges}
 
-            selected_vertices = [v for v in bm.verts if v.select]
-            edge_indices = {
-                e for v in selected_vertices for e in bm.verts[v.index].link_edges}
+        bmesh.ops.subdivide_edges(
+            bm,
+            edges=list(edge_indices),
+            cuts=1,
+            use_grid_fill=True,
+        )
 
-            bmesh.ops.subdivide_edges(
-                bm,
-                edges=list(edge_indices),
-                cuts=1,
-                use_grid_fill=True,
-            )
+        if cut_and_triangulate:
+            bmesh.ops.triangulate(bm, faces=bm.faces[:])
 
-            if cut_and_triangulate:
-                bmesh.ops.triangulate(bm, faces=bm.faces[:])
+        update_mesh(context, bm)
 
-            update_mesh(context, bm)
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_all(action='DESELECT')
+        bpy.ops.object.mode_set(mode="OBJECT")
 
-            bpy.ops.object.mode_set(mode="EDIT")
-            bpy.ops.mesh.select_all(action='DESELECT')
-            bpy.ops.object.mode_set(mode="OBJECT")
+        bm = create_bmesh(context)
 
-            bm = create_bmesh(context)
+        # Detect and select non-manifold vertices
+        non_manifold_verts = detect_non_manifold_vertices(bm)
+        for v in non_manifold_verts:
+            v.select = True
 
-            # Detect and select non-manifold vertices
-            non_manifold_verts = detect_non_manifold_vertices(bm)
-            for v in non_manifold_verts:
-                v.select = True
-
-            update_mesh(context, bm)
-            bpy.ops.object.mode_set(mode="EDIT")
-            bpy.ops.mesh.select_mode(type="VERT")
-
-        finally:
-            _BPyOpsSubModOp._view_layer_update = view_layer_update
+        update_mesh(context, bm)
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_mode(type="VERT")
 
         self.report({'INFO'},
                     f"Cut: {time.time() - start_time:.2f} seconds."
@@ -232,41 +217,34 @@ class MESH_OT_fix_non_manifold(Operator):
 
     def execute(self, context: Context):
         start_time = time.time()
-        view_layer_update = _BPyOpsSubModOp._view_layer_update
 
-        try:
-            _BPyOpsSubModOp._view_layer_update = dummy_view_layer_update
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_mode(type="VERT")
 
-            bpy.ops.object.mode_set(mode="EDIT")
-            bpy.ops.mesh.select_mode(type="VERT")
+        bm = create_bmesh(context)
 
-            bm = create_bmesh(context)
+        int_layer = bm.faces.layers.int.get("ColorIndex")
+        if int_layer is None:
+            self.report({'ERROR'},
+                        "No 'ColorIndex' face attribute found."
+                        + " Please set colors first.")
+            return {'CANCELLED'}
 
-            int_layer = bm.faces.layers.int.get("ColorIndex")
-            if int_layer is None:
-                self.report({'ERROR'},
-                            "No 'ColorIndex' face attribute found."
-                            + " Please set colors first.")
-                return {'CANCELLED'}
+        selected_vertices = [v for v in bm.verts if v.select]
 
-            selected_vertices = [v for v in bm.verts if v.select]
+        fixed_vertices = fix_non_manifold_vertices(bm, selected_vertices)
 
-            fixed_vertices = fix_non_manifold_vertices(bm, selected_vertices)
+        # Clear selection
+        for v in bm.verts:
+            v.select = False
 
-            # Clear selection
-            for v in bm.verts:
-                v.select = False
+        # Select fixed vertices
+        for v in fixed_vertices:
+            v.select = True
 
-            # Select fixed vertices
-            for v in fixed_vertices:
-                v.select = True
-
-            update_mesh(context, bm)
-            bpy.ops.object.mode_set(mode="EDIT")
-            bpy.ops.mesh.select_mode(type="VERT")
-
-        finally:
-            _BPyOpsSubModOp._view_layer_update = view_layer_update
+        update_mesh(context, bm)
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_mode(type="VERT")
 
         if fixed_vertices:
             self.report({'INFO'},
