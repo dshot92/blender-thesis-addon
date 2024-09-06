@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import bpy
 import time
 import bmesh
@@ -7,18 +9,16 @@ from pathlib import Path
 from bpy.ops import _BPyOpsSubModOp
 
 
-bl_info = {
-    "name": "DShot92 Thesis Addon",
-    "version": (1, 5),
-    "author": "DShot92 (Original Author) <dshot92@gmail.com>",
-    "blender": (2, 90, 0),
-    "category": "3D View",
-    "location": "View3D > Tool Shelf > Thesis Addon",
-    "description": "Add-on implementing Thesis algorithm to detect non manifold vertex in a clusterized mesh with differents material indices",
-    "warning": "",
-    "doc_url": "https://github.com/dshot92/internship_volume_mesh",
-    "tracker_url": "https://github.com/dshot92/internship_volume_mesh",
-}
+# bl_info = {
+#     "name": "DShot92 Thesis Addon",
+#     "version": (1, 5),
+#     "author": "DShot92 (Original Author) <dshot92@gmail.com>",
+#     "blender": (2, 90, 0),
+#     "category": "3D View",
+#     "location": "View3D > Tool Shelf > Thesis Addon",
+#     "description": "Add-on implementing Thesis algorithm to detect non manifold vertex in a clusterized mesh with differents material indices",
+#     "warning": "",
+# }
 
 
 def dummy_view_layer_update(context):
