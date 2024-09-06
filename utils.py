@@ -31,42 +31,100 @@ def update_mesh(context: Context, bm: bmesh.types.BMesh):
     bm.free()
 
 def is_non_manifold(v: bmesh.types.BMVert, bm: bmesh.types.BMesh) -> bool:
-    poly_fan = v.link_faces
-    colors = {}
-    color_attribute = bm.faces.layers.color.get("Color")
-    
-    if color_attribute is None:
-        return False
-    
-    for poly in poly_fan:
-        color = tuple(poly[color_attribute])
-        colors[color] = colors.get(color, 0) + 1
-
-    if len(colors) <= 1:
+    int_layer = bm.faces.layers.int.get("ColorIndex")
+    if int_layer is None:
         return False
 
-    comps = []
-    for p in poly_fan:
-        if not any(p in c for c in comps):
-            visited = set()
-            queue = [p]
-            while queue:
-                node = queue.pop(0)
-                if node not in visited:
-                    visited.add(node)
-                    neighbours = [f for e in node.edges for f in e.link_faces 
-                                  if f in poly_fan and tuple(f[color_attribute]) == tuple(node[color_attribute]) 
-                                  and f not in visited]
-                    queue.extend(neighbours)
-            comps.append(visited)
+    face_colors = [face[int_layer] for face in v.link_faces]
+    unique_colors = set(face_colors)
 
-    return len(colors) < len(comps)
+    if len(unique_colors) <= 1:
+        return False
+
+    # Check if the vertex is at the boundary of different color regions
+    color_regions = {}
+    for face in v.link_faces:
+        color = face[int_layer]
+        if color not in color_regions:
+            color_regions[color] = set()
+        color_regions[color].add(face)
+
+    # Check if there are disconnected regions of the same color
+    for color, region in color_regions.items():
+        if len(region) > 1:
+            # Check if all faces in this region are connected
+            start_face = next(iter(region))
+            connected = set([start_face])
+            to_check = set([start_face])
+            while to_check:
+                current_face = to_check.pop()
+                for edge in current_face.edges:
+                    if v in edge.verts:
+                        for neighbor_face in edge.link_faces:
+                            if neighbor_face in region and neighbor_face not in connected:
+                                connected.add(neighbor_face)
+                                to_check.add(neighbor_face)
+            if len(connected) != len(region):
+                return True
+
+    return False
 
 def get_or_create_color_attribute(mesh):
-    color_attribute = mesh.color_attributes.get("Color")
-    if color_attribute is None:
-        color_attribute = mesh.color_attributes.new(name="Color", type='FLOAT_COLOR', domain='CORNER')
-    elif color_attribute.domain != 'CORNER':
-        mesh.color_attributes.remove(color_attribute)
-        color_attribute = mesh.color_attributes.new(name="Color", type='FLOAT_COLOR', domain='CORNER')
-    return color_attribute
+    pass
+#     color_attribute = mesh.color_attributes.get("Color")
+#     if color_attribute is None:
+#         color_attribute = mesh.color_attributes.new(name="Color", type='FLOAT_COLOR', domain='CORNER')
+#     else:
+#         # If the attribute already exists, ensure it has the correct type and domain
+#         if color_attribute.data_type != 'FLOAT_COLOR' or color_attribute.domain != 'CORNER':
+#             mesh.color_attributes.remove(color_attribute)
+#             color_attribute = mesh.color_attributes.new(name="Color", type='FLOAT_COLOR', domain='CORNER')
+#     return color_attribute
+
+def detect_non_manifold_vertices(bm: bmesh.types.BMesh) -> List[bmesh.types.BMVert]:
+    int_layer = bm.faces.layers.int.get("ColorIndex")
+    if int_layer is None:
+        return []
+
+    non_manifold_verts = []
+
+    for v in bm.verts:
+        comps = []
+        poly_fan = v.link_faces
+        labels = {}
+        for poly in poly_fan:
+            color_index = poly[int_layer]
+            if color_index not in labels:
+                labels[color_index] = 1
+            else:
+                labels[color_index] += 1
+
+        if len(labels) > 1:  # vertex has more than 1 color -> potential non-manifold
+            for p in poly_fan:
+                flag = False
+                for c in comps:
+                    if p in c:
+                        flag = True
+                if not flag:
+                    visited = []
+                    queue = [p]
+
+                    while queue:  # select adj faces
+                        node = queue.pop(0)
+                        label = node[int_layer]
+                        if node not in visited:
+                            visited.append(node)
+                            neighbours = []
+                            for e in node.edges:
+                                for f in e.link_faces:
+                                    if f in poly_fan and f[int_layer] == label and f not in neighbours and f not in visited:
+                                        neighbours.append(f)
+                                for neighbour in neighbours:
+                                    queue.append(neighbour)
+
+                    comps.append(visited)
+
+            if len(labels) < len(comps):
+                non_manifold_verts.append(v)
+
+    return non_manifold_verts

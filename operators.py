@@ -5,7 +5,7 @@ import random
 import operator
 from bpy.types import Operator, Context
 from mathutils import noise, Color, Vector
-from .utils import create_bmesh, update_mesh, is_non_manifold, dummy_view_layer_update, get_or_create_color_attribute
+from .utils import create_bmesh, update_mesh, is_non_manifold, dummy_view_layer_update, get_or_create_color_attribute, detect_non_manifold_vertices
 from bpy.ops import _BPyOpsSubModOp
 from pathlib import Path
 
@@ -32,11 +32,11 @@ class MESH_OT_add_test_mesh(Operator):
             bm.faces.layers.float_color.remove(bm.faces.layers.float_color[-1])
 
         # Create new color layer
-        color_layer = bm.faces.layers.float_color.new("Color")
+        # color_layer = bm.faces.layers.float_color.new("Color")
 
         # Set all colors to white
-        for face in bm.faces:
-            face[color_layer] = (1, 1, 1, 1)
+        # for face in bm.faces:
+        #     face[color_layer] = (1, 1, 1, 1)
 
         # Update mesh
         bm.to_mesh(mesh)
@@ -55,14 +55,25 @@ class MESH_OT_add_test_mesh(Operator):
         # Create nodes
         node_output = nodes.new(type='ShaderNodeOutputMaterial')
         node_bsdf = nodes.new(type='ShaderNodeBsdfPrincipled')
+        node_voronoi = nodes.new(type='ShaderNodeTexVoronoi')
         node_attribute = nodes.new(type='ShaderNodeAttribute')
 
         # Set up attribute node
-        node_attribute.attribute_name = "Color"
+        node_attribute.attribute_name = "ColorIndex"
+
+        # Set up Voronoi node
+        node_voronoi.voronoi_dimensions = '3D'
+
+        # Position nodes
+        node_output.location = (600, 0)
+        node_bsdf.location = (400, 0)
+        node_voronoi.location = (200, 0)
+        node_attribute.location = (0, 0)
 
         # Link nodes
         links = material.node_tree.links
-        links.new(node_attribute.outputs["Color"], node_bsdf.inputs["Base Color"])
+        links.new(node_attribute.outputs["Vector"], node_voronoi.inputs["Vector"])
+        links.new(node_voronoi.outputs["Color"], node_bsdf.inputs["Base Color"])
         links.new(node_bsdf.outputs["BSDF"], node_output.inputs["Surface"])
 
         # Assign material to object
@@ -96,10 +107,13 @@ class MESH_OT_set_noise_colors(Operator):
         bm = bmesh.new()
         bm.from_mesh(mesh)
 
-        # Get or create color layer
-        color_layer = bm.faces.layers.float_color.get("Color")
-        if color_layer is None:
-            color_layer = bm.faces.layers.float_color.new("Color")
+        # Get or create integer attribute for color indices
+        color_index_layer = bm.faces.layers.int.get("ColorIndex")
+        if color_index_layer is None:
+            color_index_layer = bm.faces.layers.int.new("ColorIndex")
+        else:
+            # If the layer already exists, we'll overwrite its values
+            pass
 
         seed = context.scene.thesis_props.random_seed
         cluster_scale = context.scene.thesis_props.noise_scale
@@ -108,6 +122,37 @@ class MESH_OT_set_noise_colors(Operator):
         # Set seed for both noise and random
         noise.seed_set(seed)
         random.seed(seed)
+
+        # Number of distinct colors
+        num_colors = 8
+
+        if use_voronoi:
+            # Generate Voronoi points
+            num_points = context.scene.thesis_props.voronoi_points
+            voronoi_points = [Vector((random.uniform(-1, 1), random.uniform(-1, 1), random.uniform(-1, 1))) * cluster_scale for _ in range(num_points)]
+            
+            for face in bm.faces:
+                center = obj.matrix_world @ face.calc_center_median()
+                distances = [(center - point).length_squared for point in voronoi_points]
+                nearest_point_index = distances.index(min(distances))
+                color_index = nearest_point_index % num_colors
+                face[color_index_layer] = color_index
+        else:
+            # Use simple noise for clustering
+            for face in bm.faces:
+                center = obj.matrix_world @ face.calc_center_median()
+                noise_value = noise.noise(center * cluster_scale)
+                color_index = int((noise_value + 1) * 4) % num_colors
+                face[color_index_layer] = color_index
+
+        # Update mesh
+        bm.to_mesh(mesh)
+        bm.free()
+
+        mesh.update()
+
+        # Create or get the color attribute for visualization
+        color_attribute = get_or_create_color_attribute(mesh)
 
         # Define distinct colors
         distinct_colors = [
@@ -121,30 +166,10 @@ class MESH_OT_set_noise_colors(Operator):
             (0.5, 0, 1, 1),  # Purple
         ]
 
-        if use_voronoi:
-            # Generate Voronoi points
-            num_points = context.scene.thesis_props.voronoi_points
-            voronoi_points = [Vector((random.uniform(-1, 1), random.uniform(-1, 1), random.uniform(-1, 1))) * cluster_scale for _ in range(num_points)]
-            
-            for face in bm.faces:
-                center = obj.matrix_world @ face.calc_center_median()
-                distances = [(center - point).length_squared for point in voronoi_points]
-                nearest_point_index = distances.index(min(distances))
-                color_index = nearest_point_index % len(distinct_colors)
-                face[color_layer] = distinct_colors[color_index]
-        else:
-            # Use simple noise for clustering
-            for face in bm.faces:
-                center = obj.matrix_world @ face.calc_center_median()
-                noise_value = noise.noise(center * cluster_scale)
-                color_index = int((noise_value + 1) * 4) % len(distinct_colors)
-                face[color_layer] = distinct_colors[color_index]
-
-        # Update mesh
-        bm.to_mesh(mesh)
-        bm.free()
-
-        mesh.update()
+        # Set colors based on color indices
+        for poly in mesh.polygons:
+            color_index = mesh.attributes["ColorIndex"].data[poly.index].value
+            color_attribute.data[poly.index].color = distinct_colors[color_index]
 
         noise_type = "Voronoi" if use_voronoi else "Simple"
         self.report({'INFO'}, f"Set {noise_type} clustered colors: {time.time() - start_time:.2f} seconds")
@@ -152,14 +177,15 @@ class MESH_OT_set_noise_colors(Operator):
 
 
 class MESH_OT_detect_non_manifold(Operator):
-    """Detect non manifold vertices"""
+    """Detect non manifold vertices based on face color attribute"""
     bl_idname = "mesh.detect_non_manifold"
     bl_label = "Detect non manifold vertices"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
     def poll(cls, context):
-        return context.active_object is not None and context.active_object.type == 'MESH'
+        active_object = context.active_object
+        return active_object is not None and active_object.type == 'MESH' and (context.mode == 'EDIT_MESH' or active_object.select_get()) and context.area.type == "VIEW_3D"
 
     def execute(self, context: Context):
         start_time = time.time()
@@ -168,25 +194,37 @@ class MESH_OT_detect_non_manifold(Operator):
         try:
             _BPyOpsSubModOp._view_layer_update = dummy_view_layer_update
 
+            # Get the active mesh
+            me = context.object.data
+
             bpy.ops.object.mode_set(mode="EDIT")
             bpy.ops.mesh.select_all(action='DESELECT')
-            bm = create_bmesh(context)
+            bpy.ops.object.mode_set(mode="OBJECT")
 
-            bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=0.0001)
+            # Get a BMesh representation
+            bm = bmesh.new()
+            bm.from_mesh(me)
+            bm.verts.ensure_lookup_table()
 
-            for v in bm.verts:
-                if is_non_manifold(v, bm):
-                    v.select = True
+            # Detect non-manifold vertices
+            non_manifold_verts = detect_non_manifold_vertices(bm)
 
-            update_mesh(context, bm)
+            # Select non-manifold vertices
+            for v in non_manifold_verts:
+                v.select = True
+
+            # Update mesh
+            bm.to_mesh(me)
+            bm.free()
+            me.update()
+
             bpy.ops.object.mode_set(mode="EDIT")
             bpy.ops.mesh.select_mode(type="VERT")
 
         finally:
             _BPyOpsSubModOp._view_layer_update = view_layer_update
 
-        self.report(
-            {'INFO'}, f"Detect: {time.time() - start_time:.2f} seconds")
+        self.report({'INFO'}, f"Detect: {time.time() - start_time:.2f} seconds. Found {len(non_manifold_verts)} non-manifold vertices.")
         return {'FINISHED'}
 
 
@@ -213,6 +251,11 @@ class MESH_OT_fix_non_manifold(Operator):
 
             bm = create_bmesh(context)
 
+            int_layer = bm.faces.layers.int.get("ColorIndex")
+            if int_layer is None:
+                self.report({'ERROR'}, "No 'ColorIndex' face attribute found. Please set colors first.")
+                return {'CANCELLED'}
+
             selected_vertices = [v for v in bm.verts if v.select]
 
             bpy.ops.mesh.select_mode(type="FACE")
@@ -234,13 +277,13 @@ class MESH_OT_fix_non_manifold(Operator):
 
                         while queue:
                             node = queue.pop(0)
-                            label = node.material_index
+                            label = node[int_layer]
                             if node not in visited:
                                 visited.append(node)
                                 neighbours = []
                                 for e in node.edges:
                                     for f in e.link_faces:
-                                        if f in poly_fan and f.material_index == label and f not in neighbours and f not in visited:
+                                        if f in poly_fan and f[int_layer] == label and f not in neighbours and f not in visited:
                                             neighbours.append(f)
                                     for neighbour in neighbours:
                                         queue.append(neighbour)
@@ -248,27 +291,25 @@ class MESH_OT_fix_non_manifold(Operator):
 
                 labels = {}
                 for c in comps:
-                    if bm.faces[c[0].index].material_index not in labels:
-                        labels[bm.faces[c[0].index].material_index] = 1
+                    if c[0][int_layer] not in labels:
+                        labels[c[0][int_layer]] = 1
                     else:
-                        labels[bm.faces[c[0].index].material_index] += 1
+                        labels[c[0][int_layer]] += 1
 
                 if len(labels) < len(comps):
                     bm.verts[v.index].select = True
-                    most_labels = max(
-                        labels.items(), key=operator.itemgetter(1))[0]
+                    most_labels = max(labels.items(), key=operator.itemgetter(1))[0]
 
                     for c in comps:
-                        if bm.faces[c[0].index].material_index == most_labels:
-                            bm.faces[c[0].index].select = True
+                        if c[0][int_layer] == most_labels:
+                            c[0].select = True
 
-                    bpy.ops.mesh.shortest_path_select(
-                        use_topology_distance=True)
+                    bpy.ops.mesh.shortest_path_select(use_topology_distance=True)
 
                     after_selection = {f for f in bm.faces if f.select}
 
                     for f in after_selection:
-                        bm.faces[f.index].material_index = most_labels
+                        f[int_layer] = most_labels
 
             update_mesh(context, bm)
             bpy.ops.object.mode_set(mode="OBJECT")
@@ -308,8 +349,7 @@ class MESH_OT_cut_edge_star(Operator):
 
             selected_vertices = [v for v in bm.verts if v.select == True]
 
-            edge_indices = {
-                e for v in selected_vertices for e in bm.verts[v.index].link_edges}
+            edge_indices = {e for v in selected_vertices for e in bm.verts[v.index].link_edges}
 
             bmesh.ops.subdivide_edges(
                 bm,
