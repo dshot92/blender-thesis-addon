@@ -1,27 +1,36 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-import bpy
+# ----------------------------------------------------------
+# Author: Daniele Stochino (dshot92)
+# ----------------------------------------------------------
+
+import importlib
+
 from . import properties, operators, panel, utils
 
-bl_info = {
-    "name": "Thesis Addon",
-    "author": "Your Name",
-    "version": (1, 0),
-    "blender": (2, 80, 0),
-    "location": "View3D > Sidebar > Thesis Addon",
-    "description": "Addon for thesis project",
-    "category": "Mesh",
-}
+
+
+modules = (
+    properties,
+    operators,
+    panel,
+    utils,
+)
+
+if "bpy" in locals():
+    importlib.reload(properties)
+    importlib.reload(operators)
+    importlib.reload(panel)
+    importlib.reload(utils)
 
 def register():
-    properties.register()
-    operators.register()
-    panel.register()
+    for module in modules:
+        importlib.reload(module)
+        module.register()
 
 def unregister():
-    panel.unregister()
-    operators.unregister()
-    properties.unregister()
+    for module in reversed(modules):
+        module.unregister()
 
 if __name__ == "__main__":
     register()

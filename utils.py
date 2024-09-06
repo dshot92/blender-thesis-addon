@@ -3,17 +3,6 @@ import bmesh
 from bpy.types import Context
 from typing import List, Set, Dict
 
-MATERIAL_COLORS = {
-    "Red": (1.0, 0.0, 0.0, 1.0),
-    "Blue": (0.0, 0.001617, 1.0, 1.0),
-    "Green": (0.004734, 1.0, 0.0, 1.0),
-    "Yellow": (0.8, 0.716535, 0.0, 1.0),
-    "Cyan": (0.0, 0.748324, 0.8, 1.0),
-    "Lime": (0.467342, 0.8, 0.256636, 1.0),
-    "Pink": (0.642501, 0.0, 0.8, 1.0),
-    "Orange": (0.8, 0.330545, 0.0, 1.0)
-}
-
 def dummy_view_layer_update(context):
     pass
 
@@ -43,11 +32,17 @@ def update_mesh(context: Context, bm: bmesh.types.BMesh):
 
 def is_non_manifold(v: bmesh.types.BMVert, bm: bmesh.types.BMesh) -> bool:
     poly_fan = v.link_faces
-    labels = {}
+    colors = {}
+    color_attribute = bm.faces.layers.color.get("Color")
+    
+    if color_attribute is None:
+        return False
+    
     for poly in poly_fan:
-        labels[poly.material_index] = labels.get(poly.material_index, 0) + 1
+        color = tuple(poly[color_attribute])
+        colors[color] = colors.get(color, 0) + 1
 
-    if len(labels) <= 1:
+    if len(colors) <= 1:
         return False
 
     comps = []
@@ -60,9 +55,24 @@ def is_non_manifold(v: bmesh.types.BMVert, bm: bmesh.types.BMesh) -> bool:
                 if node not in visited:
                     visited.add(node)
                     neighbours = [f for e in node.edges for f in e.link_faces 
-                                  if f in poly_fan and f.material_index == node.material_index 
+                                  if f in poly_fan and tuple(f[color_attribute]) == tuple(node[color_attribute]) 
                                   and f not in visited]
                     queue.extend(neighbours)
             comps.append(visited)
 
-    return len(labels) < len(comps)
+    return len(colors) < len(comps)
+
+def get_or_create_color_attribute(mesh):
+    # Check for existing color attributes
+    existing_color_attributes = [attr for attr in mesh.color_attributes if attr.domain == 'FACE']
+    
+    if existing_color_attributes:
+        # If color attributes exist, use the first one
+        return existing_color_attributes[0]
+    else:
+        # If no color attributes exist, create a new one
+        return mesh.color_attributes.new(
+            name="Color",
+            type='FLOAT_COLOR',
+            domain='FACE'
+        )
