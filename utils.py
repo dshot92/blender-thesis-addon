@@ -3,6 +3,7 @@ import bmesh
 from bpy.types import Context
 from typing import List
 import operator
+from collections import defaultdict
 
 
 def dummy_view_layer_update(context):
@@ -153,72 +154,56 @@ def detect_non_manifold_vertices(bm: bmesh.types.BMesh) -> List[bmesh.types.BMVe
 
 
 def fix_non_manifold_vertices(bm: bmesh.types.BMesh, selected_vertices: List[bmesh.types.BMVert]) -> List[bmesh.types.BMVert]:
-    """
-    Attempts to fix non-manifold vertices by reassigning face colors.
-
-    Algorithm:
-    1. For each selected vertex:
-       a. Perform the same analysis as in analyze_vertex_manifold.
-       b. If the vertex is non-manifold:
-          - Determine the most common color index among adjacent faces.
-          - Reassign all faces in the vertex's poly_fan to this color.
-
-    This approach aims to make the color assignment around the vertex consistent,
-    effectively "fixing" the non-manifold condition in the color-based representation.
-
-    Args:
-        bm (bmesh.types.BMesh): The BMesh containing the vertices to fix.
-        selected_vertices (List[bmesh.types.BMVert]): The list of vertices to attempt to fix.
-
-    Returns:
-        List[bmesh.types.BMVert]: A list of vertices that were successfully fixed.
-    """
     int_layer = bm.faces.layers.int.get("ColorIndex")
     if int_layer is None:
         return []
 
     fixed_vertices = []
-
-    # Store the original selection state
     original_selection = {v: v.select for v in bm.verts}
 
     try:
         for v in selected_vertices:
-            comps = []
-            poly_fan = v.link_faces
+            immediate_fan = list(v.link_faces)
+            
+            # Count occurrences of each color in the immediate fan
+            color_counts = defaultdict(int)
+            for face in immediate_fan:
+                color_counts[face[int_layer]] += 1
 
-            labels = {}
-            for poly in poly_fan:
-                color_index = poly[int_layer]
-                if color_index not in labels:
-                    labels[color_index] = 1
-                else:
-                    labels[color_index] += 1
+            if len(color_counts) <= 1:
+                continue  # Vertex is already manifold
 
-            if len(labels) > 1:  # vertex has more than 1 color -> potential non-manifold
-                for p in poly_fan:
-                    if not any(p in c for c in comps):
-                        visited = []
-                        queue = [p]
+            # Identify disconnected clusters
+            clusters = []
+            for face in immediate_fan:
+                if not any(face in cluster for cluster in clusters):
+                    cluster = []
+                    color = face[int_layer]
+                    stack = [face]
+                    while stack:
+                        current_face = stack.pop()
+                        if current_face not in cluster and current_face in immediate_fan and current_face[int_layer] == color:
+                            cluster.append(current_face)
+                            stack.extend(adj for edge in current_face.edges for adj in edge.link_faces if adj in immediate_fan)
+                    clusters.append(cluster)
 
-                        while queue:
-                            node = queue.pop(0)
-                            label = node[int_layer]
-                            if node not in visited:
-                                visited.append(node)
-                                neighbours = [f for e in node.edges for f in e.link_faces
-                                              if f in poly_fan and f[int_layer] == label and f not in visited]
-                                queue.extend(neighbours)
-                        comps.append(visited)
+            # If there are disconnected clusters of the same color, connect them
+            most_common_color = max(color_counts, key=color_counts.get)
+            target_clusters = [c for c in clusters if c[0][int_layer] == most_common_color]
 
-                if len(labels) < len(comps):
-                    most_labels = max(
-                        labels.items(), key=operator.itemgetter(1))[0]
+            if len(target_clusters) > 1:
+                changes_made = False
+                for i in range(1, len(target_clusters)):
+                    # Find the shortest path between clusters
+                    bridge = find_shortest_bridge(target_clusters[0], target_clusters[i], immediate_fan)
+                    
+                    # Change the color of bridge faces
+                    for face in bridge:
+                        if face[int_layer] != most_common_color:
+                            face[int_layer] = most_common_color
+                            changes_made = True
 
-                    for c in comps:
-                        for f in c:
-                            f[int_layer] = most_labels
-
+                if changes_made:
                     fixed_vertices.append(v)
 
     finally:
@@ -227,6 +212,26 @@ def fix_non_manifold_vertices(bm: bmesh.types.BMesh, selected_vertices: List[bme
             v.select = was_selected
 
     return fixed_vertices
+
+def find_shortest_bridge(cluster1, cluster2, all_faces):
+    # Find the shortest path of faces connecting two clusters
+    start_faces = set(cluster1)
+    end_faces = set(cluster2)
+    queue = [(face, [face]) for face in start_faces]
+    visited = set(start_faces)
+
+    while queue:
+        current_face, path = queue.pop(0)
+        if current_face in end_faces:
+            return path[1:-1]  # Return the bridge faces (excluding start and end)
+
+        for edge in current_face.edges:
+            for adjacent_face in edge.link_faces:
+                if adjacent_face in all_faces and adjacent_face not in visited:
+                    visited.add(adjacent_face)
+                    queue.append((adjacent_face, path + [adjacent_face]))
+
+    return []  # No path found
 
 
 def force_reanalyze_manifold(bm: bmesh.types.BMesh):
