@@ -6,19 +6,19 @@
 
 import importlib
 
-from . import properties, operators, panel, utils
+from . import properties, operators, panel
 
 
 modules = (
-    properties,
     operators,
     panel,
+    properties,
 )
 
 if "bpy" in locals():
-    importlib.reload(properties)
     importlib.reload(operators)
     importlib.reload(panel)
+    importlib.reload(properties)
 
 
 def register():

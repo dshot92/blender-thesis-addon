@@ -1,6 +1,7 @@
 import bpy
 from bpy.types import Panel
 
+
 class VIEW3D_PT_thesis(Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
@@ -21,7 +22,8 @@ class VIEW3D_PT_thesis(Panel):
         box.prop(scene.thesis_props, "noise_scale")
         box.prop(scene.thesis_props, "use_voronoi")
         box.prop(scene.thesis_props, "num_clusters")
-        box.operator('mesh.set_noise_colors', text="Set Noise-based Colors", icon="PROP_OFF")
+        box.operator('mesh.set_noise_colors',
+                     text="Set Noise-based Colors", icon="PROP_OFF")
 
         box = layout.box()
         box.label(text="Fix")
@@ -42,8 +44,10 @@ class VIEW3D_PT_thesis(Panel):
             icon="PROP_OFF",
         )
 
+
 def register():
     bpy.utils.register_class(VIEW3D_PT_thesis)
+
 
 def unregister():
     bpy.utils.unregister_class(VIEW3D_PT_thesis)

@@ -2,6 +2,7 @@ import bpy
 from bpy.props import BoolProperty, IntProperty, FloatProperty
 from bpy.types import PropertyGroup
 
+
 class MESH_OT_Thesis_Props(PropertyGroup):
     triangulate: BoolProperty(
         name="Triangulate Cuts",
@@ -34,9 +35,12 @@ class MESH_OT_Thesis_Props(PropertyGroup):
         default=True
     )
 
+
 def register():
     bpy.utils.register_class(MESH_OT_Thesis_Props)
-    bpy.types.Scene.thesis_props = bpy.props.PointerProperty(type=MESH_OT_Thesis_Props)
+    bpy.types.Scene.thesis_props = bpy.props.PointerProperty(
+        type=MESH_OT_Thesis_Props)
+
 
 def unregister():
     del bpy.types.Scene.thesis_props
