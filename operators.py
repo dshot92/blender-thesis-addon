@@ -282,9 +282,10 @@ class MESH_OT_cut_edge_star(Operator):
 
             bm = create_bmesh(context)
 
-            for v in bm.verts:
-                if is_non_manifold(v, bm):
-                    v.select = True
+            # Detect and select non-manifold vertices
+            non_manifold_verts = detect_non_manifold_vertices(bm)
+            for v in non_manifold_verts:
+                v.select = True
 
             update_mesh(context, bm)
             bpy.ops.object.mode_set(mode="EDIT")
@@ -293,7 +294,7 @@ class MESH_OT_cut_edge_star(Operator):
         finally:
             _BPyOpsSubModOp._view_layer_update = view_layer_update
 
-        self.report({'INFO'}, f"Cut: {time.time() - start_time:.2f} seconds")
+        self.report({'INFO'}, f"Cut: {time.time() - start_time:.2f} seconds. Found {len(non_manifold_verts)} non-manifold vertices.")
         return {'FINISHED'}
 
 
