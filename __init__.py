@@ -30,3 +30,5 @@ def register():
 def unregister():
     for module in reversed(modules):
         module.unregister()
+
+# This file handles the registration and unregistration of the addon modules.

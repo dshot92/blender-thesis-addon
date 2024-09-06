@@ -9,7 +9,9 @@ from pathlib import Path
 
 
 class MESH_OT_add_test_mesh(Operator):
-    """Add Test Mesh"""
+    """
+    Blender operator to import a test mesh (bunny.obj) and assign a color material to it.
+    """
     bl_idname = "mesh.add_test_mesh"
     bl_label = "Add Test Mesh"
     bl_options = {'REGISTER', 'UNDO'}
@@ -35,7 +37,9 @@ class MESH_OT_add_test_mesh(Operator):
 
 
 class MESH_OT_set_noise_colors(Operator):
-    """Set Clustered Colors to each face of the mesh"""
+    """
+    Blender operator to assign clustered colors to each face of the active mesh using either Voronoi or simple noise.
+    """
     bl_idname = "mesh.set_noise_colors"
     bl_label = "Set Clustered Colors"
     bl_options = {'REGISTER', 'UNDO'}
@@ -105,7 +109,9 @@ class MESH_OT_set_noise_colors(Operator):
 
 
 class MESH_OT_detect_non_manifold(Operator):
-    """Detect non manifold vertices based on face color attribute"""
+    """
+    Blender operator to detect and select non-manifold vertices based on face color attributes.
+    """
     bl_idname = "mesh.detect_non_manifold"
     bl_label = "Detect non manifold vertices"
     bl_options = {'REGISTER', 'UNDO'}
@@ -147,7 +153,9 @@ class MESH_OT_detect_non_manifold(Operator):
 
 
 class MESH_OT_cut_edge_star(Operator):
-    """Cut edges around selected vertices"""
+    """
+    Blender operator to subdivide edges around selected vertices and optionally triangulate the resulting faces.
+    """
     bl_idname = "mesh.cut_edge_star"
     bl_label = "Cut Edge-Star around vertex"
     bl_options = {'REGISTER', 'UNDO'}
@@ -205,7 +213,9 @@ class MESH_OT_cut_edge_star(Operator):
 
 
 class MESH_OT_fix_non_manifold(Operator):
-    """Fix non manifold vertices"""
+    """
+    Blender operator to fix non-manifold vertices by reassigning face colors.
+    """
     bl_idname = "mesh.fix_non_manifold"
     bl_label = "Fix non manifold vertices"
     bl_options = {'REGISTER', 'UNDO'}

@@ -10,6 +10,15 @@ def dummy_view_layer_update(context):
 
 
 def create_color_material():
+    """
+    Creates and returns a new material with nodes set up for color visualization based on the 'ColorIndex' attribute.
+
+    This function sets up a node-based material that uses the 'ColorIndex' attribute to generate a color
+    visualization. It uses a Voronoi texture node to create a varied color pattern based on the attribute value.
+
+    Returns:
+        bpy.types.Material: The created material with the color visualization setup.
+    """
     # Create new material
     material = bpy.data.materials.new(name="Color_Material")
     material.use_nodes = True
@@ -42,6 +51,9 @@ def create_color_material():
 
 
 def create_bmesh(context: Context) -> bmesh.types.BMesh:
+    """
+    Creates and returns a BMesh object from the active mesh in the given context.
+    """
     if context.edit_object:
         me = context.edit_object.data
         bm = bmesh.from_edit_mesh(me)
@@ -57,6 +69,9 @@ def create_bmesh(context: Context) -> bmesh.types.BMesh:
 
 
 def update_mesh(context: Context, bm: bmesh.types.BMesh):
+    """
+    Updates the active mesh in the given context with the provided BMesh data.
+    """
     if context.edit_object:
         me = context.edit_object.data
         bmesh.update_edit_mesh(me)
@@ -68,6 +83,26 @@ def update_mesh(context: Context, bm: bmesh.types.BMesh):
 
 
 def analyze_vertex_manifold(bm: bmesh.types.BMesh) -> List[bmesh.types.BMVert]:
+    """
+    Analyzes the given BMesh to detect non-manifold vertices based on face color indices.
+
+    Algorithm:
+    1. For each vertex, examine its adjacent faces (poly_fan).
+    2. Count the occurrences of each color index in the adjacent faces.
+    3. If there's more than one color, perform a connected component analysis:
+       - Use a breadth-first search to find connected faces of the same color.
+    4. If the number of distinct colors is less than the number of connected components,
+       the vertex is considered non-manifold.
+
+    This approach detects vertices where faces of the same color are not continuously connected,
+    indicating a potential non-manifold condition in the color-based representation.
+
+    Args:
+        bm (bmesh.types.BMesh): The BMesh to analyze.
+
+    Returns:
+        List[bmesh.types.BMVert]: A list of detected non-manifold vertices.
+    """
     int_layer = bm.faces.layers.int.get("ColorIndex")
     if int_layer is None:
         return []
@@ -111,10 +146,33 @@ def is_non_manifold(v: bmesh.types.BMVert, bm: bmesh.types.BMesh) -> bool:
 
 
 def detect_non_manifold_vertices(bm: bmesh.types.BMesh) -> List[bmesh.types.BMVert]:
+    """
+    Wrapper function for analyze_vertex_manifold.
+    """
     return analyze_vertex_manifold(bm)
 
 
 def fix_non_manifold_vertices(bm: bmesh.types.BMesh, selected_vertices: List[bmesh.types.BMVert]) -> List[bmesh.types.BMVert]:
+    """
+    Attempts to fix non-manifold vertices by reassigning face colors.
+
+    Algorithm:
+    1. For each selected vertex:
+       a. Perform the same analysis as in analyze_vertex_manifold.
+       b. If the vertex is non-manifold:
+          - Determine the most common color index among adjacent faces.
+          - Reassign all faces in the vertex's poly_fan to this color.
+
+    This approach aims to make the color assignment around the vertex consistent,
+    effectively "fixing" the non-manifold condition in the color-based representation.
+
+    Args:
+        bm (bmesh.types.BMesh): The BMesh containing the vertices to fix.
+        selected_vertices (List[bmesh.types.BMVert]): The list of vertices to attempt to fix.
+
+    Returns:
+        List[bmesh.types.BMVert]: A list of vertices that were successfully fixed.
+    """
     int_layer = bm.faces.layers.int.get("ColorIndex")
     if int_layer is None:
         return []

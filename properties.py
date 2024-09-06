@@ -4,6 +4,10 @@ from bpy.types import PropertyGroup
 
 
 class MESH_OT_Thesis_Props(PropertyGroup):
+    """
+    Property group class that defines various properties used by the thesis addon,
+    including triangulation option, random seed, noise scale, number of clusters, and Voronoi toggle.
+    """
     triangulate: BoolProperty(
         name="Triangulate Cuts",
         description="Triangulate Mesh Cuts",

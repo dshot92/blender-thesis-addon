@@ -3,6 +3,10 @@ from bpy.types import Panel
 
 
 class VIEW3D_PT_thesis(Panel):
+    """
+    Blender panel class that creates a UI for the thesis addon in the 3D View sidebar.
+    Provides controls for mesh operations, color assignment, and non-manifold vertex detection and fixing.
+    """
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_label = "Thesis Addon"
