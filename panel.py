@@ -19,11 +19,29 @@ class VIEW3D_PT_thesis(Panel):
         box.label(text="Set Colors")
         box.prop(scene.thesis_props, "random_seed")
         box.prop(scene.thesis_props, "noise_scale")
+        box.prop(scene.thesis_props, "use_voronoi")
+        if scene.thesis_props.use_voronoi:
+            box.prop(scene.thesis_props, "voronoi_points")
         box.operator('mesh.set_noise_colors', text="Set Noise-based Colors", icon="PROP_OFF")
 
         box = layout.box()
         box.label(text="Fix")
-        box.operator('mesh.detect_non_manifold', text="Detect non manifold vertices", icon="PROP_OFF")
+        box.operator(
+            'mesh.detect_non_manifold',
+            text="Detect non manifold vertices",
+            icon="PROP_OFF",
+        )
+        box.operator(
+            'mesh.cut_edge_star',
+            text="Cut Edge-Star",
+            icon="SCULPTMODE_HLT",
+        )
+        box.prop(scene.thesis_props, "triangulate")
+        box.operator(
+            'mesh.fix_non_manifold',
+            text="Fix non manifold vertices",
+            icon="PROP_OFF",
+        )
 
 def register():
     bpy.utils.register_class(VIEW3D_PT_thesis)

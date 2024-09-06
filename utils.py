@@ -63,16 +63,10 @@ def is_non_manifold(v: bmesh.types.BMVert, bm: bmesh.types.BMesh) -> bool:
     return len(colors) < len(comps)
 
 def get_or_create_color_attribute(mesh):
-    # Check for existing color attributes
-    existing_color_attributes = [attr for attr in mesh.color_attributes if attr.domain == 'FACE']
-    
-    if existing_color_attributes:
-        # If color attributes exist, use the first one
-        return existing_color_attributes[0]
-    else:
-        # If no color attributes exist, create a new one
-        return mesh.color_attributes.new(
-            name="Color",
-            type='FLOAT_COLOR',
-            domain='FACE'
-        )
+    color_attribute = mesh.color_attributes.get("Color")
+    if color_attribute is None:
+        color_attribute = mesh.color_attributes.new(name="Color", type='FLOAT_COLOR', domain='CORNER')
+    elif color_attribute.domain != 'CORNER':
+        mesh.color_attributes.remove(color_attribute)
+        color_attribute = mesh.color_attributes.new(name="Color", type='FLOAT_COLOR', domain='CORNER')
+    return color_attribute

@@ -21,6 +21,18 @@ class MESH_OT_Thesis_Props(PropertyGroup):
         min=0.01,
         soft_max=1.0
     )
+    voronoi_points: IntProperty(
+        name="Voronoi Points",
+        description="Number of Voronoi points to generate",
+        default=10,
+        min=1,
+        max=100
+    )
+    use_voronoi: BoolProperty(
+        name="Use Voronoi",
+        description="Toggle between Voronoi noise and simple noise",
+        default=True
+    )
 
 def register():
     bpy.utils.register_class(MESH_OT_Thesis_Props)
