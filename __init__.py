@@ -31,6 +31,12 @@ class MESH_OT_Thesis_Props(PropertyGroup):
         description="Triangulate Mesh Cuts",
         default=False
     )
+    random_seed: bpy.props.IntProperty(
+        name="Random Seed",
+        description="Seed for random material assignment",
+        default=42,
+        min=0
+    )
 
 def create_bmesh(context: Context) -> bmesh.types.BMesh:
     if context.edit_object:
@@ -143,6 +149,14 @@ class MESH_OT_set_random_labels(Operator):
     bl_label = "Set Random Labels"
     bl_options = {'REGISTER', 'UNDO'}
 
+    # Add a property for the seed
+    seed: bpy.props.IntProperty(
+        name="Seed",
+        description="Seed for random number generator",
+        default=42,
+        min=0
+    )
+
     # Allow program to select only when a vertex, edge ora face is selected in edit mode, otherwise deactivate panels buttons
     @classmethod
     def poll(cls, context):
@@ -153,6 +167,9 @@ class MESH_OT_set_random_labels(Operator):
         start_time = time.time()
         bpy.ops.object.mode_set(mode="EDIT")
         bm = create_bmesh(context)
+
+        # Set the seed for the random number generator
+        random.seed(self.seed)
 
         for f in bm.faces:
             f.material_index = random.randrange(len(MATERIAL_COLORS))
@@ -426,11 +443,13 @@ class VIEW3D_PT_thesis(bpy.types.Panel):
 
         box = layout.box()
         box.label(text="Set Colors")
-        box.operator(
+        box.prop(scene.thesis_props, "random_seed")
+        op = box.operator(
             'mesh.set_random_labels',
             text="Set Random Poly Labels",
             icon="PROP_OFF",
         )
+        op.seed = scene.thesis_props.random_seed
 
         box.operator(
             'mesh.set_labels_origin',
