@@ -30,7 +30,3 @@ def register():
 def unregister():
     for module in reversed(modules):
         module.unregister()
-
-
-if __name__ == "__main__":
-    register()

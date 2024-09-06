@@ -118,46 +118,48 @@ def detect_non_manifold_vertices(bm: bmesh.types.BMesh) -> List[bmesh.types.BMVe
 
     return non_manifold_verts
 
-def fix_non_manifold_vertices(bm: bmesh.types.BMesh, selected_vertices: List[bmesh.types.BMVert]) -> None:
+def fix_non_manifold_vertices(bm: bmesh.types.BMesh, selected_vertices: List[bmesh.types.BMVert]) -> List[bmesh.types.BMVert]:
     int_layer = bm.faces.layers.int.get("ColorIndex")
     if int_layer is None:
-        return
+        return []
+
+    fixed_vertices = []
 
     for v in selected_vertices:
         comps = []
         poly_fan = v.link_faces
 
-        for p in poly_fan:
-            if not any(p in c for c in comps):
-                visited = []
-                queue = [p]
-
-                while queue:
-                    node = queue.pop(0)
-                    label = node[int_layer]
-                    if node not in visited:
-                        visited.append(node)
-                        neighbours = [f for e in node.edges for f in e.link_faces 
-                                      if f in poly_fan and f[int_layer] == label and f not in visited]
-                        queue.extend(neighbours)
-                comps.append(visited)
-
         labels = {}
-        for c in comps:
-            label = c[0][int_layer]
-            labels[label] = labels.get(label, 0) + 1
+        for poly in poly_fan:
+            color_index = poly[int_layer]
+            if color_index not in labels:
+                labels[color_index] = 1
+            else:
+                labels[color_index] += 1
 
-        if len(labels) < len(comps):
-            v.select = True
-            most_labels = max(labels.items(), key=operator.itemgetter(1))[0]
+        if len(labels) > 1:  # vertex has more than 1 color -> potential non-manifold
+            for p in poly_fan:
+                if not any(p in c for c in comps):
+                    visited = []
+                    queue = [p]
 
-            for c in comps:
-                if c[0][int_layer] == most_labels:
-                    c[0].select = True
+                    while queue:
+                        node = queue.pop(0)
+                        label = node[int_layer]
+                        if node not in visited:
+                            visited.append(node)
+                            neighbours = [f for e in node.edges for f in e.link_faces
+                                          if f in poly_fan and f[int_layer] == label and f not in visited]
+                            queue.extend(neighbours)
+                    comps.append(visited)
 
-            # Note: We can't use bpy.ops inside this function, so we'll handle the selection in the operator
+            if len(labels) < len(comps):
+                most_labels = max(labels.items(), key=operator.itemgetter(1))[0]
 
-            after_selection = {f for f in v.link_faces if f.select}
+                for c in comps:
+                    for f in c:
+                        f[int_layer] = most_labels
 
-            for f in after_selection:
-                f[int_layer] = most_labels
+                fixed_vertices.append(v)
+
+    return fixed_vertices

@@ -39,9 +39,9 @@ class MESH_OT_add_test_mesh(Operator):
         node_voronoi.voronoi_dimensions = '3D'
 
         # Position nodes
-        node_output.location = (800, 0)
-        node_bsdf.location = (600, 0)
-        node_voronoi.location = (400, 0)
+        node_output.location = (600, 0)
+        node_bsdf.location = (400, 0)
+        node_voronoi.location = (200, 0)
         node_attribute.location = (0, 0)
 
         # Link nodes
@@ -199,26 +199,28 @@ class MESH_OT_fix_non_manifold(Operator):
 
             selected_vertices = [v for v in bm.verts if v.select]
 
-            bpy.ops.mesh.select_mode(type="FACE")
-            bpy.ops.mesh.select_all(action='DESELECT')
+            fixed_vertices = fix_non_manifold_vertices(bm, selected_vertices)
 
-            fix_non_manifold_vertices(bm, selected_vertices)
-
-            bpy.ops.mesh.select_all(action='DESELECT')
+            # Clear selection
             for v in bm.verts:
-                if v.select:
-                    for f in v.link_faces:
-                        f.select = True
-            bpy.ops.mesh.shortest_path_select(use_topology_distance=True)
+                v.select = False
+
+            # Select fixed vertices
+            for v in fixed_vertices:
+                v.select = True
 
             update_mesh(context, bm)
-            bpy.ops.object.mode_set(mode="OBJECT")
             bpy.ops.object.mode_set(mode="EDIT")
+            bpy.ops.mesh.select_mode(type="VERT")
 
         finally:
             _BPyOpsSubModOp._view_layer_update = view_layer_update
 
-        self.report({'INFO'}, f"Fix: {time.time() - start_time:.2f} seconds")
+        if fixed_vertices:
+            self.report({'INFO'}, f"Fix: {time.time() - start_time:.2f} seconds. Fixed {len(fixed_vertices)} vertices.")
+        else:
+            self.report({'INFO'}, f"Fix: {time.time() - start_time:.2f} seconds. No vertices needed fixing.")
+
         return {'FINISHED'}
 
 class MESH_OT_cut_edge_star(Operator):
